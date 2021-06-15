@@ -1,0 +1,4 @@
+git+https://github.com/c0j0s/notion-py@master#egg=notion
+requests
+pathlib
+colorama

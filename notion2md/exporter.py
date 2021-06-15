@@ -1,6 +1,9 @@
 import os
+import re
 import requests
 from datetime import datetime
+from pathlib import Path
+from notion2md.color import *
 
 
 class PageBlockExporter:
@@ -15,101 +18,92 @@ class PageBlockExporter:
         else:
             self.file_name = self.page.title
             self.md = ""
-        self.image_dir = ""
-        self.download_dir = ""
+        self.image_dir = None
+        self.download_dir = None
         self.sub_exporters = []
 
-    def create_main_folder(self, directory):
-        """create folder with file name
+    def create_main_folder(self, directory: Path):
+        """ create folder with file name
 
-          Args:
+        Args:
             directory(Stirng): set empty by default.
         """
-        self.dir = directory + self.title + '/'
+        self.dir = directory / get_safe_name(self.title)
+        create_dir(self.dir)
 
-        if not(os.path.isdir(self.dir)):
-            os.makedirs(os.path.join(self.dir))
+    def create_folder(self, directory: Path):
+        """ create folder with directory
 
-    def create_folder(self, directory):
-        """create folder with directory
-
-          Args:
+        Args: 
             directory(Stirng): set empty by default.
         """
         self.dir = directory
-
-        if not(os.path.isdir(self.dir)):
-            os.makedirs(os.path.join(self.dir))
+        create_dir(self.dir)
 
     def create_sub_folder(self):
-        """create sub folder with current file name
+        """ create sub folder with current file name
 
-          Args:
+        Args:
             directory(Stirng): set empty by default.
         """
-        self.sub_dir = self.dir + 'subpage/'
-        if not(os.path.isdir(self.sub_dir)):
-            os.makedirs(os.path.join(self.sub_dir))
+        self.sub_dir = self.dir / 'subpage'
+        create_dir(self.sub_dir)
 
     def create_file(self):
-        """create md file that md will be stored
+        """ create md file that md will be stored
 
           Returns:
             self.file(String): path of file
         """
-        file_path = os.path.join(self.dir, self.file_name + '.md')
+        # file_path = os.path.join(self.dir, self.file_name + '.md')
+        file_path = self.dir / get_safe_name("%s.md" % self.file_name)
         self.file = open(file_path, 'w')
         return file_path
 
     def write_file(self):
-        """save markdown output in the file
-        """
+        """ save markdown output in the file """
         self.file.write(self.md)
         self.file.close()
 
     def create_image_foler(self):
-        """create image output directory
-        """
-        self.image_dir = os.path.join(self.dir, 'image/')
-        if not(os.path.isdir(self.image_dir)):
-            os.makedirs(os.path.join(self.image_dir))
+        """ create image output directory """
+        self.image_dir = self.dir / 'image'
+        create_dir(self.image_dir)
 
     def image_export(self, url, count):
-        """make image file based on url and count.
+        """ make image file based on url and count.
 
-          Args:
+        Args:
             url(Stirng): url of image
             count(int): the number of image in the page
 
-          Returns:
+        Returns:
             image_path(String): image_path for the link in markdown
         """
-        if self.image_dir is "":
+        if self.image_dir is None:
             self.create_image_foler()
-        image_path = self.image_dir + 'img_{0}.png'.format(count)
+
+        image_path = self.image_dir / 'img_{0}.png'.format(count)
         r = requests.get(url, allow_redirects=True)
         open(image_path, 'wb').write(r.content)
-        return image_path
+        return "image/%s" % 'img_{0}.png'.format(count)
 
     def create_download_foler(self):
-        """create download output directory
-        """
-        self.download_dir = os.path.join(self.dir, 'download/')
-        print(self.download_dir)
-        if not(os.path.isdir(self.download_dir)):
-            os.makedirs(os.path.join(self.download_dir))
+        """ create download output directory """
+        self.download_dir = self.dir / 'download'
+        create_dir(self.download_dir)
 
     def downlaod_file(self, url, file_name):
-        """download a file in the page.
+        """ download a file in the page.
 
-          Args:
+        Args:
             url(Stirng): url of the downlaod file
             file_name(String): name of the file
 
-          Returns:
+        Returns:
             None
         """
-        if self.download_dir is "":
+        if self.download_dir is None:
             self.create_download_foler()
 
         try:
@@ -120,9 +114,9 @@ class PageBlockExporter:
         open(download_path, 'wb').write(r.content)
 
     def _page_header(self):
-        """return the page's header formatted as Front Matter
+        """ return the page's header formatted as Front Matter
 
-          Returns:
+        Returns:
             header(Stirng): return Front Matter header
         """
         header = "---\n"
@@ -140,12 +134,12 @@ class PageBlockExporter:
         return header
 
     def _get_tags(self):
-        """return tags in the page
+        """ return tags in the page
 
-          Condition:
+        Condition:
             "Tags" or "tags" property should exit in the page
 
-          Returns:
+        Returns:
             tags([String]): tags in "Tags or tags" property in the page
         """
         try:
@@ -156,12 +150,12 @@ class PageBlockExporter:
         return tags
 
     def _format_date(self):
-        """return created date in the page
+        """ return created date in the page
 
-          Condition:
+        Condition:
             "created" or "Created" property should exit in the page
 
-          Returns:
+        Returns:
             formatted_date(String): formatted created date
         """
         date = self.page.get_property("created_time")
@@ -169,9 +163,9 @@ class PageBlockExporter:
         return formatted_date
 
     def _set_filename(self):
-        """return formatted file name
+        """ return formatted file name
 
-          Returns:
+        Returns:
             file name(String): formatted_file_name
         """
         try:
@@ -183,19 +177,19 @@ class PageBlockExporter:
         return file_name
 
     def page2md(self, page=None):
-        """change notion's block to markdown string
-        """
-        params = {'tap_count':0,'img_count':0,'num_index':0}
+        """ change notion's block to markdown string """
+        params = {'tap_count': 0, 'img_count': 0, 'num_index': 0}
         if page is None:
             page = self.page
-        for i,block in enumerate(page.children):
+        for i, block in enumerate(page.children):
             try:
-                self.block2md(block,params)
+                self.block2md(block, params)
             except Exception as e:
                 self.md += ""
         self.md = self.md[:-1]
+        # print(self.md)
 
-    def block2md(self,block,params):
+    def block2md(self, block, params):
         if params['tap_count'] != 0:
             self.md += '\n'
             for i in range(params['tap_count']):
@@ -206,17 +200,21 @@ class PageBlockExporter:
             pass
         if btype != "numbered_list":
             params['num_index'] = 0
+
         try:
             bt = block.title
-        except:
+        except Exception as e:
+            # print(e)
             pass
+
+        # print(block.type)
         if btype == 'header':
             self.md += "# " + filter_inline_math(block)
-        if btype == "sub_header":
+        elif btype == "sub_header":
             self.md += "## " + filter_inline_math(block)
-        if btype == "sub_sub_header":
+        elif btype == "sub_sub_header":
             self.md += "### " + filter_inline_math(block)
-        if btype == 'page':
+        elif btype == 'page':
             self.create_sub_folder()
             sub_url = block.get_browseable_url()
             exporter = PageBlockExporter(sub_url, self.client, self.bmode)
@@ -224,50 +222,57 @@ class PageBlockExporter:
             sub_page_path = exporter.create_file()
             try:
                 if "https:" in block.icon:
-                    icon = "!"+link_format("", block.icon)
+                    icon = "!" + link_format("", block.icon)
                 else:
                     icon = block.icon
             except:
                 icon = ""
             self.sub_exporters.append(exporter)
             self.md += icon + link_format(exporter.file_name, sub_page_path)
-        if btype == 'text':
+        elif btype == 'text':
             try:
                 self.md += filter_inline_math(block)
             except:
                 self.md += ""
-        if btype == 'bookmark':
+        elif btype == 'bookmark':
             self.md += link_format(bt, block.link)
-        if btype == "video" or btype == "file" or btype == "audio" or btype == "pdf" or btype == "gist":
+        elif btype == "video" or btype == "file" or btype == "audio" or btype == "pdf" or btype == "gist":
             self.md += link_format(block.source, block.source)
-        if btype == "bulleted_list" or btype == "toggle":
-            self.md += '- '+filter_inline_math(block)
-        if btype == "numbered_list":
+        elif btype == "bulleted_list" or btype == "toggle":
+            self.md += '- ' + filter_inline_math(block)
+        elif btype == "numbered_list":
             params['num_index'] += 1
-            self.md += str(params['num_index'])+'. '+filter_inline_math(block)
-        if btype == "code":
-            self.md += "``` "+block.language.lower()+"\n"+block.title+"\n```"
-        if btype == "equation":
-            self.md += "$$"+block.latex+"$$"
-        if btype == "divider":
+            self.md += str(params['num_index']) + '. ' + filter_inline_math(block)
+        elif btype == "code":
+            self.md += "``` " + block.language.lower() + "\n" + block.title + "\n```"
+        elif btype == "equation":
+            self.md += "$$" + block.latex + "$$"
+        elif btype == "divider":
             self.md += "---"
-        if btype == "to_do":
+        elif btype == "to_do":
             if block.checked:
                 self.md += "- [x] " + bt
             else:
                 self.md += "- [ ]" + bt
-        if btype == "quote":
-            self.md += "> "+bt
-        if btype == "column" or btype == "column_list":
+        elif btype == "quote":
+            self.md += "> " + bt
+        elif btype == "column" or btype == "column_list":
             self.md += ""
-        if btype == "collection_view":
+        elif btype == "collection_view":
             collection = block.collection
             self.md += self.make_table(collection)
+        elif btype == "image":
+            """ download image and patch md """
+            image_path = self.image_export(block.source, params["img_count"])
+            self.md += "![](%s)" % image_path
+            params["img_count"] += 1
+
         if block.children and btype != 'page':
             params['tap_count'] += 1
             for child in block.children:
-                self.block2md(child,params)
+                self.block2md(child, params)
             params['tap_count'] -= 1
+
         if params['tap_count'] == 0:
             self.md += "\n\n"
 
@@ -301,10 +306,22 @@ class PageBlockExporter:
         return table_to_markdown(table)
 
 
+def get_safe_name(name):
+    name = name.replace("/", "|")
+    return name
+
+
+def create_dir(dir_path: Path, _log=False):
+    if not dir_path.is_dir():
+        if _log:
+            print("creat %s" % dir_path)
+        dir_path.mkdir()
+    return True
+
+
 def link_format(name, url):
-    """make markdown link format string
-    """
-    return "["+name+"]"+"("+url+")"
+    """ make markdown link format string """
+    return "[%s](%s)" % (name, url)
 
 
 def table_to_markdown(table):
@@ -329,10 +346,11 @@ def filter_inline_math(block):
     elements = block.get("properties")["title"]
     for i in elements:
         if i[0] == "⁍":
-            text += "$$"+i[1][0][1]+"$$"
+            text += "$$" + i[1][0][1] + "$$"
         else:
             text += block.title
     return text
+
 
 def filter_source_url(block):
     try:
